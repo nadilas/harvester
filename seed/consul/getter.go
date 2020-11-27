@@ -48,7 +48,32 @@ func (g *Getter) Get(key string) (*string, uint64, error) {
 		return nil, 0, err
 	}
 	if pair == nil {
-		return nil, 0, nil
+		pairs, _, err := g.kv.List(key, &api.QueryOptions{Datacenter: g.dc, Token: g.token})
+		if err != nil {
+			return nil, 0, err
+		}
+		// not a folder
+		if pairs == nil {
+			return nil, 0, nil
+		}
+		// build json from underlying keys
+		m := make(map[string]interface{}, len(pairs))
+		for _, kv := range pairs {
+			// ignore folders
+			if kv.Value == nil {
+				continue
+			}
+			k := strings.ReplaceAll(kv.Key, key + "/", "")
+			m[k] = string(kv.Value)
+		}
+		bytes, err := json.Marshal(m)
+		if err != nil {
+			return nil, 0, err
+		}
+		v := string(bytes)
+
+		// take the modifyIndex of the folder itself for now
+		return &v, pairs[0].ModifyIndex, nil
 	}
 	val := string(pair.Value)
 	return &val, pair.ModifyIndex, nil
